@@ -1,0 +1,14 @@
+# Database configuration
+src/main/resources/db.properties
+
+# Build files
+target/
+bin/
+
+# IDE files
+.vscode/
+.idea/
+*.iml
+
+# macOS
+.DS_Store
