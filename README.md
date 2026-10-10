@@ -149,14 +149,19 @@ db.password=
 ```
 
 ### Step 3: Run the Application
-You can run using the provided script or Maven:
 
-**Method A: Using Run Script (Quickest on macOS M1)**
+#### On macOS / Linux:
 ```bash
 ./run.sh
 ```
 
-**Method B: Using Maven**
+#### On Windows:
+Double-click `run.bat` or run in Command Prompt / PowerShell:
+```cmd
+run.bat
+```
+
+#### Cross-Platform via Maven (Windows / Mac / Linux):
 ```bash
 mvn clean compile exec:java
 ```
