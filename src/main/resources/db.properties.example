@@ -1,0 +1,12 @@
+# =========================================================
+# Employee Time Management System - Database Configuration Template
+# Copy this file to 'db.properties' and set your credentials.
+# Environment variables DB_URL, DB_USER, DB_PASSWORD take precedence.
+# =========================================================
+db.driver=com.mysql.cj.jdbc.Driver
+db.url=jdbc:mysql://localhost:3306/employee_time_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&createDatabaseIfNotExist=true
+db.user=root
+db.password=
+db.pool.maxSize=10
+db.pool.minIdle=2
+db.pool.timeout=30000

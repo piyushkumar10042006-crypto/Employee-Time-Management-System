@@ -18,17 +18,19 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Data Access Object for Leave Requests using JDBC transactions.
- * Fulfills Database Operations and Transaction Handling criteria.
+ * Data Access Object for Leave Requests using robust JDBC transactions.
+ * Manages atomic leave approval and balance deduction with TRANSACTION_READ_COMMITTED
+ * isolation and clean try-with-resources connection leasing.
  */
 public class LeaveDAO {
 
     public LeaveRequest applyLeave(LeaveRequest req) throws DatabaseOperationException {
         String sql = "INSERT INTO leave_requests (user_id, leave_type, start_date, end_date, days_count, reason, status) " +
                      "VALUES (?, ?, ?, ?, ?, ?, ?)";
-        Connection conn = DBConnection.getInstance().getConnection();
 
-        try (PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+        try (Connection conn = DBConnection.getInstance().getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+
             stmt.setInt(1, req.getUserId());
             stmt.setString(2, req.getLeaveType().name());
             stmt.setDate(3, Date.valueOf(req.getStartDate()));
@@ -54,9 +56,9 @@ public class LeaveDAO {
         String sql = "SELECT l.*, u.name as user_name FROM leave_requests l " +
                      "JOIN users u ON l.user_id = u.user_id " +
                      "WHERE l.user_id = ? ORDER BY l.applied_at DESC";
-        Connection conn = DBConnection.getInstance().getConnection();
 
-        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+        try (Connection conn = DBConnection.getInstance().getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setInt(1, userId);
             try (ResultSet rs = stmt.executeQuery()) {
                 while (rs.next()) {
@@ -74,9 +76,9 @@ public class LeaveDAO {
         String sql = "SELECT l.*, u.name as user_name FROM leave_requests l " +
                      "JOIN users u ON l.user_id = u.user_id " +
                      "WHERE l.status = 'PENDING' ORDER BY l.applied_at ASC";
-        Connection conn = DBConnection.getInstance().getConnection();
 
-        try (PreparedStatement stmt = conn.prepareStatement(sql);
+        try (Connection conn = DBConnection.getInstance().getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql);
              ResultSet rs = stmt.executeQuery()) {
             while (rs.next()) {
                 list.add(mapRowToLeave(rs));
@@ -88,66 +90,68 @@ public class LeaveDAO {
     }
 
     /**
-     * Updates leave status. If APPROVED, utilizes a JDBC Transaction (commit/rollback)
-     * to safely deduct days from the employee's leave balance in the users table.
+     * Updates leave status. If APPROVED, utilizes an atomic JDBC Transaction
+     * with TRANSACTION_READ_COMMITTED isolation to safely deduct days from the employee's
+     * leave balance. Automatically rolls back on failure and safely restores connection state.
      */
     public boolean updateStatus(int leaveId, LeaveStatus newStatus, int reviewerId) throws DatabaseOperationException {
-        Connection conn = DBConnection.getInstance().getConnection();
-        boolean initialAutoCommit = true;
+        String selectSql = "SELECT user_id, days_count FROM leave_requests WHERE leave_id = ? FOR UPDATE";
+        String updateLeaveSql = "UPDATE leave_requests SET status = ?, reviewed_by = ? WHERE leave_id = ?";
+        String deductSql = "UPDATE users SET leave_balance = GREATEST(0, leave_balance - ?) WHERE user_id = ?";
 
-        try {
-            initialAutoCommit = conn.getAutoCommit();
-            conn.setAutoCommit(false); // Begin SQL Transaction
+        try (Connection conn = DBConnection.getInstance().getConnection()) {
+            boolean originalAutoCommit = conn.getAutoCommit();
+            try {
+                conn.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+                conn.setAutoCommit(false); // Begin SQL Transaction
 
-            // 1. Fetch leave record details
-            int userId = 0;
-            int days = 0;
-            String selectSql = "SELECT user_id, days_count FROM leave_requests WHERE leave_id = ?";
-            try (PreparedStatement selStmt = conn.prepareStatement(selectSql)) {
-                selStmt.setInt(1, leaveId);
-                try (ResultSet rs = selStmt.executeQuery()) {
-                    if (rs.next()) {
-                        userId = rs.getInt("user_id");
-                        days = rs.getInt("days_count");
-                    } else {
-                        conn.rollback();
-                        return false;
+                // 1. Fetch leave record details with row lock
+                int userId = 0;
+                int days = 0;
+                try (PreparedStatement selStmt = conn.prepareStatement(selectSql)) {
+                    selStmt.setInt(1, leaveId);
+                    try (ResultSet rs = selStmt.executeQuery()) {
+                        if (rs.next()) {
+                            userId = rs.getInt("user_id");
+                            days = rs.getInt("days_count");
+                        } else {
+                            conn.rollback();
+                            return false;
+                        }
                     }
                 }
-            }
 
-            // 2. Update leave request table
-            String updateLeaveSql = "UPDATE leave_requests SET status = ?, reviewed_by = ? WHERE leave_id = ?";
-            try (PreparedStatement updStmt = conn.prepareStatement(updateLeaveSql)) {
-                updStmt.setString(1, newStatus.name());
-                updStmt.setInt(2, reviewerId);
-                updStmt.setInt(3, leaveId);
-                updStmt.executeUpdate();
-            }
-
-            // 3. If APPROVED, deduct leave balance from users table
-            if (newStatus == LeaveStatus.APPROVED) {
-                String deductSql = "UPDATE users SET leave_balance = GREATEST(0, leave_balance - ?) WHERE user_id = ?";
-                try (PreparedStatement deductStmt = conn.prepareStatement(deductSql)) {
-                    deductStmt.setInt(1, days);
-                    deductStmt.setInt(2, userId);
-                    deductStmt.executeUpdate();
+                // 2. Update leave request table
+                try (PreparedStatement updStmt = conn.prepareStatement(updateLeaveSql)) {
+                    updStmt.setString(1, newStatus.name());
+                    updStmt.setInt(2, reviewerId);
+                    updStmt.setInt(3, leaveId);
+                    updStmt.executeUpdate();
                 }
-            }
 
-            conn.commit(); // Commit Transaction
-            return true;
+                // 3. If APPROVED, deduct leave balance from users table
+                if (newStatus == LeaveStatus.APPROVED) {
+                    try (PreparedStatement deductStmt = conn.prepareStatement(deductSql)) {
+                        deductStmt.setInt(1, days);
+                        deductStmt.setInt(2, userId);
+                        deductStmt.executeUpdate();
+                    }
+                }
+
+                conn.commit(); // Commit Transaction
+                return true;
+            } catch (SQLException ex) {
+                try {
+                    conn.rollback(); // Rollback on error
+                } catch (SQLException ignored) {}
+                throw new DatabaseOperationException("Transaction failed while updating leave status: " + ex.getMessage(), ex);
+            } finally {
+                try {
+                    conn.setAutoCommit(originalAutoCommit); // Restore auto-commit state
+                } catch (SQLException ignored) {}
+            }
         } catch (SQLException ex) {
-            try {
-                conn.rollback(); // Rollback on error
-            } catch (SQLException ignored) {
-            }
-            throw new DatabaseOperationException("Transaction failed while updating leave status: " + ex.getMessage(), ex);
-        } finally {
-            try {
-                conn.setAutoCommit(initialAutoCommit);
-            } catch (SQLException ignored) {
-            }
+            throw new DatabaseOperationException("Database connection error: " + ex.getMessage(), ex);
         }
     }
 

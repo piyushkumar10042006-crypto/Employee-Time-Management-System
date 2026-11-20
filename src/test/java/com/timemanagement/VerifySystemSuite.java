@@ -14,72 +14,29 @@ import com.timemanagement.model.User;
 import com.timemanagement.model.enums.AttendanceStatus;
 import com.timemanagement.model.enums.LeaveStatus;
 import com.timemanagement.model.enums.LeaveType;
-import com.timemanagement.model.enums.Role;
 import com.timemanagement.service.SessionManager;
 import com.timemanagement.thread.LiveClockThread;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 
 import javax.swing.JLabel;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 /**
- * Automated Verification Test Suite.
+ * Automated Verification Test Suite (JUnit 5).
  * Audits models, inheritance, polymorphism, calculations, multithreading,
  * session synchronization, and custom exception handling.
  */
 public class VerifySystemSuite {
 
-    private static int passedTests = 0;
-    private static int totalTests = 0;
-
-    public static void main(String[] args) {
-        System.out.println("=============================================================");
-        System.out.println("    Running Complete System Functionality Audit Suite        ");
-        System.out.println("=============================================================");
-
-        runTest("OOP Inheritance & Role Polymorphism", VerifySystemSuite::testUserPolymorphism);
-        runTest("Encapsulation & Property Invariants", VerifySystemSuite::testEncapsulation);
-        runTest("Attendance Hours & Overtime Calculations", VerifySystemSuite::testAttendanceCalculations);
-        runTest("Leave Request Days & Status Workflow", VerifySystemSuite::testLeaveCalculations);
-        runTest("Session Manager Synchronization", VerifySystemSuite::testSessionSynchronization);
-        runTest("Multithreading Live Clock Lifecycle", VerifySystemSuite::testLiveClockThread);
-        runTest("Custom Exception Hierarchy Integrity", VerifySystemSuite::testExceptionHierarchy);
-
-        System.out.println("=============================================================");
-        System.out.printf("Audit Results: %d / %d Tests Passed.\n", passedTests, totalTests);
-        System.out.println("=============================================================");
-
-        if (passedTests != totalTests) {
-            System.exit(1);
-        }
-    }
-
-    private static void runTest(String testName, Runnable testLogic) {
-        totalTests++;
-        try {
-            testLogic.run();
-            System.out.printf("  ✓ [PASS] %s\n", testName);
-            passedTests++;
-        } catch (Throwable t) {
-            System.out.printf("  ❌ [FAIL] %s: %s\n", testName, t.getMessage());
-            t.printStackTrace(System.out);
-        }
-    }
-
-    private static void assertTrue(boolean condition, String message) {
-        if (!condition) throw new AssertionError("Assertion Failed: " + message);
-    }
-
-    private static void assertEquals(Object expected, Object actual, String message) {
-        if (expected == null && actual == null) return;
-        if (expected == null || !expected.equals(actual)) {
-            throw new AssertionError(String.format("%s: Expected [%s] but got [%s]", message, expected, actual));
-        }
-    }
-
     // 1. Test User Polymorphism and Inheritance
-    private static void testUserPolymorphism() {
+    @Test
+    @DisplayName("OOP Inheritance & Role Polymorphism")
+    void testUserPolymorphism() {
         User emp = new Employee(1, "Alice", "alice@company.com", "pass", "Engineering", 20, 30.0);
         User mgr = new Manager(2, "Bob", "bob@company.com", "pass", "Engineering", 22);
         User adm = new Admin(3, "Carol", "carol@company.com", "pass", "IT", 25);
@@ -94,17 +51,19 @@ public class VerifySystemSuite {
         assertEquals("Department Manager", mgr.getRoleBadge(), "Manager role badge");
         assertEquals("System Administrator", adm.getRoleBadge(), "Admin role badge");
 
-        assertTrue(!emp.canApproveLeaves(), "Employee cannot approve leaves");
+        assertFalse(emp.canApproveLeaves(), "Employee cannot approve leaves");
         assertTrue(mgr.canApproveLeaves(), "Manager can approve leaves");
         assertTrue(adm.canApproveLeaves(), "Admin can approve leaves");
 
-        assertTrue(!emp.canManageUsers(), "Employee cannot manage users");
-        assertTrue(!mgr.canManageUsers(), "Manager cannot manage users");
+        assertFalse(emp.canManageUsers(), "Employee cannot manage users");
+        assertFalse(mgr.canManageUsers(), "Manager cannot manage users");
         assertTrue(adm.canManageUsers(), "Admin can manage users");
     }
 
     // 2. Test Encapsulation & Validation Invariants
-    private static void testEncapsulation() {
+    @Test
+    @DisplayName("Encapsulation & Property Invariants")
+    void testEncapsulation() {
         Employee emp = new Employee();
         emp.setName("David");
         assertEquals("David", emp.getName(), "Name getter/setter");
@@ -115,17 +74,15 @@ public class VerifySystemSuite {
         emp.setLeaveBalance(-5); // Must clamp to 0
         assertEquals(0, emp.getLeaveBalance(), "Leave balance must not be negative");
 
-        boolean caughtInvalidEmail = false;
-        try {
+        assertThrows(IllegalArgumentException.class, () -> {
             emp.setEmail("invalid-email");
-        } catch (IllegalArgumentException e) {
-            caughtInvalidEmail = true;
-        }
-        assertTrue(caughtInvalidEmail, "Invalid email must throw IllegalArgumentException");
+        }, "Invalid email must throw IllegalArgumentException");
     }
 
     // 3. Test Attendance Hours and Overtime Calculations
-    private static void testAttendanceCalculations() {
+    @Test
+    @DisplayName("Attendance Hours & Overtime Calculations")
+    void testAttendanceCalculations() {
         AttendanceRecord record = new AttendanceRecord();
         record.setClockIn(LocalTime.of(9, 0));
         record.setClockOut(LocalTime.of(18, 30)); // 9.5 hours
@@ -143,7 +100,9 @@ public class VerifySystemSuite {
     }
 
     // 4. Test Leave Request Calculations
-    private static void testLeaveCalculations() {
+    @Test
+    @DisplayName("Leave Request Days & Status Workflow")
+    void testLeaveCalculations() {
         LocalDate start = LocalDate.now().plusDays(2);
         LocalDate end = LocalDate.now().plusDays(5);
         int days = (int) ChronoUnit.DAYS.between(start, end) + 1;
@@ -161,7 +120,9 @@ public class VerifySystemSuite {
     }
 
     // 5. Test Session Synchronization
-    private static void testSessionSynchronization() {
+    @Test
+    @DisplayName("Session Manager Synchronization")
+    void testSessionSynchronization() {
         SessionManager session = SessionManager.getInstance();
         User testUser = new Employee(10, "Tester", "tester@test.com", "pass", "QA", 15, 20.0);
 
@@ -170,11 +131,13 @@ public class VerifySystemSuite {
         assertEquals(testUser, session.getCurrentUser(), "Current user match");
 
         session.logout();
-        assertTrue(!session.isLoggedIn(), "Session must report logged out after logout");
+        assertFalse(session.isLoggedIn(), "Session must report logged out after logout");
     }
 
     // 6. Test LiveClockThread Lifecycle
-    private static void testLiveClockThread() {
+    @Test
+    @DisplayName("Multithreading Live Clock Lifecycle")
+    void testLiveClockThread() {
         JLabel clockLbl = new JLabel();
         JLabel shiftLbl = new JLabel();
         LiveClockThread clock = new LiveClockThread(clockLbl, shiftLbl);
@@ -189,11 +152,13 @@ public class VerifySystemSuite {
             clock.join(1500); // Wait up to 1.5s for clean shutdown
         } catch (InterruptedException ignored) {}
 
-        assertTrue(!clock.isAlive(), "Live clock thread must terminate cleanly when stopped");
+        assertFalse(clock.isAlive(), "Live clock thread must terminate cleanly when stopped");
     }
 
     // 7. Test Exception Hierarchy
-    private static void testExceptionHierarchy() {
+    @Test
+    @DisplayName("Custom Exception Hierarchy Integrity")
+    void testExceptionHierarchy() {
         TimeManagementException authEx = new AuthenticationException("Bad login");
         TimeManagementException attEx = new AttendanceException("Already clocked in");
         TimeManagementException leaveEx = new InsufficientLeaveException("Balance low");

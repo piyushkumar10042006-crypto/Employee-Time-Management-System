@@ -991,7 +991,7 @@ public class MainDashboardFrame extends JFrame {
                             todayStatusBadge.setText("Shift Finished (" + rec.getHoursWorked() + " hrs)");
                             todayStatusBadge.setForeground(UITheme.PRIMARY);
                             todayHoursStat.setText(rec.getHoursWorked() + " hrs");
-                            checkInButton.setEnabled(false);
+                            checkInButton.setEnabled(true);
                             checkOutButton.setEnabled(false);
                             clockThread.clearPunchInTime();
                         } else {

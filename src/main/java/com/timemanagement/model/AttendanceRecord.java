@@ -4,19 +4,21 @@ import com.timemanagement.model.enums.AttendanceStatus;
 
 import java.time.Duration;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 
 /**
- * Represents a daily employee attendance record.
- * Encapsulates check-in, check-out, duration calculations, and status.
+ * Represents an employee attendance record supporting standard and overnight shifts.
+ * Uses LocalDate and LocalDateTime for accurate multi-day shift duration and overtime calculations.
  */
 public class AttendanceRecord {
 
     private int recordId;
     private int userId;
-    private String userName; // Convenient for UI presentation tables
+    private String userName; // For UI presentation
     private LocalDate recordDate;
     private LocalTime clockIn;
+    private LocalDate clockOutDate;
     private LocalTime clockOut;
     private double hoursWorked;
     private double overtimeHours;
@@ -31,10 +33,17 @@ public class AttendanceRecord {
     public AttendanceRecord(int recordId, int userId, LocalDate recordDate, LocalTime clockIn, 
                             LocalTime clockOut, double hoursWorked, double overtimeHours, 
                             AttendanceStatus status, String notes) {
+        this(recordId, userId, recordDate, clockIn, recordDate, clockOut, hoursWorked, overtimeHours, status, notes);
+    }
+
+    public AttendanceRecord(int recordId, int userId, LocalDate recordDate, LocalTime clockIn,
+                            LocalDate clockOutDate, LocalTime clockOut, double hoursWorked,
+                            double overtimeHours, AttendanceStatus status, String notes) {
         this.recordId = recordId;
         this.userId = userId;
         this.recordDate = recordDate;
         this.clockIn = clockIn;
+        this.clockOutDate = clockOutDate;
         this.clockOut = clockOut;
         this.hoursWorked = hoursWorked;
         this.overtimeHours = overtimeHours;
@@ -43,22 +52,78 @@ public class AttendanceRecord {
     }
 
     /**
-     * Recalculates hours worked and overtime based on punch times.
-     * Standard work day is 8.0 hours.
+     * Returns the full clock-in timestamp using recordDate and clockIn.
+     */
+    public LocalDateTime getClockInDateTime() {
+        if (recordDate != null && clockIn != null) {
+            return LocalDateTime.of(recordDate, clockIn);
+        }
+        return null;
+    }
+
+    /**
+     * Sets clock-in date and time together.
+     */
+    public void setClockInDateTime(LocalDateTime dateTime) {
+        if (dateTime != null) {
+            this.recordDate = dateTime.toLocalDate();
+            this.clockIn = dateTime.toLocalTime().withNano(0);
+        }
+    }
+
+    /**
+     * Returns the full clock-out timestamp using clockOutDate and clockOut.
+     */
+    public LocalDateTime getClockOutDateTime() {
+        if (clockOutDate != null && clockOut != null) {
+            return LocalDateTime.of(clockOutDate, clockOut);
+        } else if (recordDate != null && clockOut != null) {
+            return LocalDateTime.of(recordDate, clockOut);
+        }
+        return null;
+    }
+
+    /**
+     * Sets clock-out date and time together and recalculates hours.
+     */
+    public void setClockOutDateTime(LocalDateTime dateTime) {
+        if (dateTime != null) {
+            this.clockOutDate = dateTime.toLocalDate();
+            this.clockOut = dateTime.toLocalTime().withNano(0);
+            computeHours();
+        }
+    }
+
+    /**
+     * Recalculates hours worked and overtime based on punch timestamps.
+     * Rejects invalid clock-out timestamps when clock-out is before clock-in.
      */
     public void computeHours() {
         if (clockIn != null && clockOut != null) {
-            long minutes = Duration.between(clockIn, clockOut).toMinutes();
-            this.hoursWorked = Math.max(0, Math.round((minutes / 60.0) * 100.0) / 100.0);
-            
-            if (this.hoursWorked > 8.0) {
-                this.overtimeHours = Math.round((this.hoursWorked - 8.0) * 100.0) / 100.0;
-            } else {
-                this.overtimeHours = 0.0;
-            }
+            LocalDateTime start = getClockInDateTime();
+            LocalDateTime end = getClockOutDateTime();
 
-            if (this.hoursWorked < 4.5 && this.hoursWorked > 0.0) {
-                this.status = AttendanceStatus.HALF_DAY;
+            if (start != null && end != null) {
+                if (end.isBefore(start)) {
+                    throw new IllegalArgumentException(String.format(
+                            "Invalid clock-out timestamp: clock-out (%s) cannot be before clock-in (%s).",
+                            end, start));
+                }
+
+                long minutes = Duration.between(start, end).toMinutes();
+                this.hoursWorked = Math.round((minutes / 60.0) * 100.0) / 100.0;
+
+                if (this.hoursWorked > 8.0) {
+                    this.overtimeHours = Math.round((this.hoursWorked - 8.0) * 100.0) / 100.0;
+                } else {
+                    this.overtimeHours = 0.0;
+                }
+
+                if (this.hoursWorked < 4.5 && this.hoursWorked > 0.0) {
+                    this.status = AttendanceStatus.HALF_DAY;
+                } else if (this.hoursWorked >= 8.0) {
+                    this.status = AttendanceStatus.PRESENT;
+                }
             }
         }
     }
@@ -101,7 +166,15 @@ public class AttendanceRecord {
     }
 
     public void setClockIn(LocalTime clockIn) {
-        this.clockIn = clockIn;
+        this.clockIn = clockIn != null ? clockIn.withNano(0) : null;
+    }
+
+    public LocalDate getClockOutDate() {
+        return clockOutDate;
+    }
+
+    public void setClockOutDate(LocalDate clockOutDate) {
+        this.clockOutDate = clockOutDate;
     }
 
     public LocalTime getClockOut() {
@@ -109,7 +182,11 @@ public class AttendanceRecord {
     }
 
     public void setClockOut(LocalTime clockOut) {
-        this.clockOut = clockOut;
+        this.clockOut = clockOut != null ? clockOut.withNano(0) : null;
+        if (this.clockOutDate == null && this.recordDate != null) {
+            // Default to recordDate if not explicitly provided
+            this.clockOutDate = this.recordDate;
+        }
         computeHours();
     }
 

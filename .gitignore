@@ -1,5 +1,7 @@
-# Database configuration
+# Database configuration & local backups
 src/main/resources/db.properties
+sql/backup_*.sql
+*.sql.bak
 
 # Build files
 target/

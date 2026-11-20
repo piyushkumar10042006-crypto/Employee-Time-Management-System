@@ -1,5 +1,6 @@
 package com.timemanagement;
 
+import com.timemanagement.db.DBConnection;
 import com.timemanagement.db.DBInitializer;
 import com.timemanagement.exception.DatabaseOperationException;
 import com.timemanagement.ui.LoginFrame;
@@ -32,6 +33,14 @@ public class Main {
         try {
             DBInitializer.initializeDatabase();
             System.out.println("✓ Database connection established and tables verified.");
+
+            // Register JVM Shutdown Hook for HikariCP Connection Pool
+            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                try {
+                    DBConnection.getInstance().closePool();
+                } catch (Exception ignored) {
+                }
+            }));
         } catch (DatabaseOperationException ex) {
             System.err.println("⚠ Database initialization warning: " + ex.getMessage());
             // Show helpful dialog with troubleshooting tips
